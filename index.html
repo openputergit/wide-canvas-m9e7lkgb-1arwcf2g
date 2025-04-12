@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsightMinds</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Sentiment Analysis Library -->
+    <script src="https://unpkg.com/sentiment@5.0.2/build/sentiment.min.js"></script>
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #f1f1f1;
+        }
+        .progress-bar {
+            height: 6px;
+            border-radius: 3px;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+        }
+        .chart-grid {
+            stroke: rgba(255, 255, 255, 0.1);
+            stroke-dasharray: 2;
+        }
+        .stacked-bar {
+            transition: all 0.3s ease;
+        }
+        .message-bubble {
+            border-radius: 18px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            max-width: 80%;
+        }
+        .user-message {
+            background-color: #2a2a2a;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        .system-message {
+            background-color: #383838;
+            align-self: flex-start;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .emotion-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            margin-right: 4px;
+        }
+        .radar-chart {
+            position: relative;
+            width: 100%;
+            height: 250px;
+        }
+        .emotion-percentage {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        // Create React Context for App Data
+        const AppContext = React.createContext();
+        
+        // Custom Hook to use App Context
+        const useAppContext = () => React.useContext(AppContext);
+        
+        // App Provider Component
+        const AppProvider = ({ children }) => {
+            const [currentPage, setCurrentPage] = React.useState('analytics');
+            const [messages, setMessages] = React.useState(() => {
+                const savedMessages = localStorage.getItem('insightMinds_messages');
+                return savedMessages ? JSON.parse(savedMessages) : [];
+            });
+            
+            const [emotions, setEmotions] = React.useState(() => {
+                const savedEmotions = localStorage.getItem('insightMinds_emotions');
+                return savedEmotions ? JSON.parse(savedEmotions) : {
+                    joy: 0,
+                    sadness: 0,
+                    anger: 0,
+                    fear: 0,
+                    surprise: 0,
+                    disgust: 0,
+                    neutral: 0
+                };
+            });
+            
+            const [moodData, setMoodData] = React.useState(() => {
+                const savedMoodData = localStorage.getItem('insightMinds_moodData');
+                if (savedMoodData) {
+                    return JSON.parse(savedMoodData);
+                }
+                
+                // Default mood data for the week
+                const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                return {
+                    moodStability: {
+                        current: 6,
+                        target: 3,
+                        progress: 50
+                    },
+                    selfTalk: {
+                        current: 30,
+                        target: 10,
+                        progress: 67
+                    },
+                    challenges: {
+                        current: 2,
+                        target: 1,
+                        progress: 75
+                    },
+                    mindfulness: {
+                        current: 5,
+                        target: 3,
+                        progress: 60
+                    },
+                    moodJourney: days.map((day, i) => ({
+                        day,
+                        value: Math.floor(Math.random() * 6) + 3
+                    })),
+                    copingTools: [
+                        {name: 'Journaling', effectiveness: 55, usageCount: 12},
+                        {name: 'Mindfulness', effectiveness: 80, usageCount: 15},
+                        {name: 'Breathing Exercises', effectiveness: 30, usageCount: 5}
+                    ],
+                    selfTalkPatterns: days.map((day, i) => ({
+                        day,
+                        positive: Math.floor(Math.random() * 40) + 40,
+                        negative: Math.floor(Math.random() * 30) + 20
+                    }))
+                };
+            });
+            
+            // Save messages to localStorage whenever they change
+            React.useEffect(() => {
+                localStorage.setItem('insightMinds_messages', JSON.stringify(messages));
+            }, [messages]);
+            
+            // Save emotions to localStorage whenever they change
+            React.useEffect(() => {
+                localStorage.setItem('insightMinds_emotions', JSON.stringify(emotions));
+            }, [emotions]);
+            
+            // Save mood data to localStorage whenever it changes
+            React.useEffect(() => {
+                localStorage.setItem('insightMinds_moodData', JSON.stringify(moodData));
+            }, [moodData]);
+            
+            // Analyze text for emotions using NLP
+            const analyzeEmotions = (text) => {
+                // Keywords associated with each emotion
+                const emotionKeywords = {
+                    joy: ['happy', 'joy', 'excited', 'glad', 'wonderful', 'pleased', 'delighted', 'content', 'thrilled', 'elated'],
+                    sadness: ['sad', 'unhappy', 'depressed', 'down', 'miserable', 'heartbroken', 'gloomy', 'disappointed', 'grief', 'sorrow'],
+                    anger: ['angry', 'mad', 'furious', 'rage', 'annoyed', 'irritated', 'frustrated', 'outraged', 'bitter', 'resentful'],
+                    fear: ['afraid', 'scared', 'fearful', 'terrified', 'worried', 'anxious', 'panic', 'nervous', 'dread', 'uneasy'],
+                    surprise: ['surprised', 'shocked', 'amazed', 'astonished', 'stunned', 'startled', 'unexpected', 'wow', 'wonder', 'disbelief'],
+                    disgust: ['disgusted', 'repulsed', 'revolted', 'gross', 'nauseous', 'sickened', 'distaste', 'aversion', 'loathing', 'offended']
+                };
+                
+                const lowercaseText = text.toLowerCase();
+                const emotionScores = {
+                    joy: 0,
+                    sadness: 0,
+                    anger: 0,
+                    fear: 0,
+                    surprise: 0,
+                    disgust: 0
+                };
+                
+                // Count keyword matches for each emotion
+                Object.keys(emotionKeywords).forEach(emotion => {
+                    emotionKeywords[emotion].forEach(keyword => {
+                        if (lowercaseText.includes(keyword)) {
+                            emotionScores[emotion] += 1;
+                        }
+                    });
+                });
+                
+                // Use sentiment analysis for additional scoring
+                const sentiment = new Sentiment();
+                const sentimentResult = sentiment.analyze(text);
+                
+                // Adjust scores based on sentiment
+                if (sentimentResult.score > 2) {
+                    emotionScores.joy += 2;
+                } else if (sentimentResult.score < -2) {
+                    emotionScores.sadness += 1;
+                    emotionScores.anger += 0.5;
+                }
+                
+                // Normalize to get percentage
+                const total = Object.values(emotionScores).reduce((sum, score) => sum + score, 0);
+                
+                if (total === 0) {
+                    return {
+                        joy: 0,
+                        sadness: 0,
+                        anger: 0,
+                        fear: 0,
+                        surprise: 0,
+                        disgust: 0,
+                        neutral: 100,
+                        primaryEmotion: 'neutral',
+                        sentimentScore: sentimentResult.score
+                    };
+                }
+                
+                const normalizedScores = {};
+                let maxScore = 0;
+                let primaryEmotion = 'neutral';
+                
+                Object.keys(emotionScores).forEach(emotion => {
+                    normalizedScores[emotion] = Math.round((emotionScores[emotion] / total) * 100);
+                    if (normalizedScores[emotion] > maxScore) {
+                        maxScore = normalizedScores[emotion];
+                        primaryEmotion = emotion;
+                    }
+                });
+                
+                normalizedScores.neutral = 100 - Object.values(normalizedScores).reduce((sum, score) => sum + score, 0);
+                if (normalizedScores.neutral < 0) normalizedScores.neutral = 0;
+                
+                if (maxScore === 0) {
+                    primaryEmotion = 'neutral';
+                }
+                
+                normalizedScores.primaryEmotion = primaryEmotion;
+                normalizedScores.sentimentScore = sentimentResult.score;
+                
+                return normalizedScores;
+            };
+            
+            // Add a new message and analyze sentiment and emotions
+            const addMessage = (text) => {
+                if (!text.trim()) return;
+                
+                const sentiment = new Sentiment();
+                const result = sentiment.analyze(text);
+                const score = result.score;
+                let mood;
+                
+                if (score > 2) mood = 'positive';
+                else if (score < -2) mood = 'negative';
+                else mood = 'neutral';
+                
+                // Analyze emotions
+                const emotionAnalysis = analyzeEmotions(text);
+                const primaryEmotion = emotionAnalysis.primaryEmotion;
+                
+                // Create new message with emotion data
+                const newMessage = {
+                    id: Date.now(),
+                    text,
+                    timestamp: new Date().toISOString(),
+                    sentiment: mood,
+                    score,
+                    emotions: emotionAnalysis
+                };
+                
+                setMessages(prev => [...prev, newMessage]);
+                
+                // Update overall emotion tracking
+                setEmotions(prev => {
+                    const updated = { ...prev };
+                    Object.keys(emotionAnalysis).forEach(emotion => {
+                        if (emotion !== 'primaryEmotion' && emotion !== 'sentimentScore') {
+                            updated[emotion] = Math.round((prev[emotion] + emotionAnalysis[emotion]) / 2);
+                        }
+                    });
+                    return updated;
+                });
+                
+                // Update mood journey data
+                const today = new Date().toLocaleDateString('en-US', { weekday: 'short' }).substring(0, 3);
+                const moodValue = score < -5 ? 3 : score > 5 ? 9 : Math.floor(score + 6);
+                
+                setMoodData(prev => {
+                    const updatedMoodJourney = [...prev.moodJourney];
+                    const todayIndex = updatedMoodJourney.findIndex(item => item.day === today);
+                    if (todayIndex >= 0) {
+                        updatedMoodJourney[todayIndex].value = moodValue;
+                    }
+                    
+                    // Update self-talk patterns
+                    const updatedSelfTalkPatterns = [...prev.selfTalkPatterns];
+                    const todaySelfTalkIndex = updatedSelfTalkPatterns.findIndex(item => item.day === today);
+                    if (todaySelfTalkIndex >= 0) {
+                        if (mood === 'positive') {
+                            updatedSelfTalkPatterns[todaySelfTalkIndex].positive += 5;
+                            if (updatedSelfTalkPatterns[todaySelfTalkIndex].positive > 100) {
+                                updatedSelfTalkPatterns[todaySelfTalkIndex].positive = 100;
+                            }
+                            updatedSelfTalkPatterns[todaySelfTalkIndex].negative -= 2;
+                            if (updatedSelfTalkPatterns[todaySelfTalkIndex].negative < 0) {
+                                updatedSelfTalkPatterns[todaySelfTalkIndex].negative = 0;
+                            }
+                        } else if (mood === 'negative') {
+                            updatedSelfTalkPatterns[todaySelfTalkIndex].negative += 5;
+                            if (updatedSelfTalkPatterns[todaySelfTalkIndex].negative > 100) {
+                                updatedSelfTalkPatterns[todaySelfTalkIndex].negative = 100;
+                            }
+                            updatedSelfTalkPatterns[todaySelfTalkIndex].positive -= 2;
+                            if (updatedSelfTalkPatterns[todaySelfTalkIndex].positive < 0) {
+                                updatedSelfTalkPatterns[todaySelfTalkIndex].positive = 0;
+                            }
+                        }
+                    }
+                    
+                    // Update coping tools based on sentiment
+                    const updatedCopingTools = [...prev.copingTools];
+                    if (mood === 'positive') {
+                        // Increase effectiveness of the first coping tool if message is positive
+                        if (updatedCopingTools[0]) {
+                            updatedCopingTools[0].effectiveness += 2;
+                            updatedCopingTools[0].usageCount += 1;
+                            if (updatedCopingTools[0].effectiveness > 100) {
+                                updatedCopingTools[0].effectiveness = 100;
+                            }
+                        }
+                    } else if (mood === 'negative') {
+                        // Decrease effectiveness of the first coping tool if message is negative
+                        if (updatedCopingTools[0]) {
+                            updatedCopingTools[0].effectiveness -= 1;
+                            if (updatedCopingTools[0].effectiveness < 0) {
+                                updatedCopingTools[0].effectiveness = 0;
+                            }
+                        }
+                    }
+                    
+                    return {
+                        ...prev,
+                        moodJourney: updatedMoodJourney,
+                        selfTalkPatterns: updatedSelfTalkPatterns,
+                        copingTools: updatedCopingTools,
+                    };
+                });
+                
+                // Generate AI response based on emotion
+                setTimeout(() => {
+                    // Responses for different emotional states
+                    const responsesByEmotion = {
+                        joy: [
+                            "I'm happy to see you're feeling good! What contributed to this positive mood?",
+                            "That's wonderful! Happiness is worth celebrating. What's bringing you joy?",
+                            "I'm glad you're in a positive state. How can you maintain this good energy?"
+                        ],
+                        sadness: [
+                            "I notice you seem to be feeling down. Would you like to talk more about what's causing this?",
+                            "I'm sorry you're feeling sad. Remember that emotions are temporary, and this will pass.",
+                            "When we're feeling sad, it can help to connect with others. Is there someone you could reach out to?"
+                        ],
+                        anger: [
+                            "I sense some frustration in your message. Taking three deep breaths can help in moments like this.",
+                            "It's completely normal to feel angry sometimes. What triggered this feeling?",
+                            "Anger often masks other emotions. Is there something underneath the anger worth exploring?"
+                        ],
+                        fear: [
+                            "I hear that you're feeling anxious. Remember to focus on what's in your control.",
+                            "Fear is a natural response. Is there a specific concern I can help you think through?",
+                            "When anxiety rises, grounding exercises can help. Would you like to try one?"
+                        ],
+                        surprise: [
+                            "That sounds unexpected! How are you processing this surprise?",
+                            "Unexpected events can throw us off balance. How are you adapting to this change?",
+                            "Surprises can be opportunities for growth. What might you learn from this situation?"
+                        ],
+                        disgust: [
+                            "That sounds quite unpleasant. How are you coping with this situation?",
+                            "It's normal to have strong aversions. Is there a way to reframe your perspective?",
+                            "When something feels repulsive, it often conflicts with our values. What value might this be touching on?"
+                        ],
+                        neutral: [
+                            "I appreciate your reflection. Would you like to explore this thought further?",
+                            "Thank you for sharing. Is there a specific aspect of this you'd like to focus on?",
+                            "I'm here to listen and help process your thoughts. What feels most important right now?"
+                        ]
+                    };
+                    
+                    // Get responses for primary emotion
+                    const availableResponses = responsesByEmotion[primaryEmotion] || responsesByEmotion.neutral;
+                    const randomResponse = availableResponses[Math.floor(Math.random() * availableResponses.length)];
+                    
+                    // Custom response based on sentiment score
+                    let followUpSuggestion = "";
+                    if (score < -4) {
+                        followUpSuggestion = " Consider trying a brief mindfulness exercise to help shift your perspective.";
+                    } else if (score > 4) {
+                        followUpSuggestion = " It might be a good time to reflect on what's working well so you can return to these strategies later.";
+                    }
+                    
+                    const systemResponse = {
+                        id: Date.now(),
+                        text: randomResponse + followUpSuggestion,
+                        timestamp: new Date().toISOString(),
+                        isSystem: true
+                    };
+                    
+                    setMessages(prev => [...prev, systemResponse]);
+                }, 1000);
+            };
+            
+            // Generate personalized suggestions based on mood trends
+            const getSuggestions = () => {
+                // Calculate average sentiment score from recent messages
+                const recentMessages = messages.slice(-5).filter(msg => !msg.isSystem);
+                const avgScore = recentMessages.length > 0 
+                    ? recentMessages.reduce((sum, msg) => sum + (msg.score || 0), 0) / recentMessages.length
+                    : 0;
+                
+                // Get day with lowest mood
+                const lowestMoodDay = [...moodData.moodJourney].sort((a, b) => a.value - b.value)[0];
+                
+                // Get most effective coping tool
+                const mostEffectiveTool = [...moodData.copingTools].sort((a, b) => b.effectiveness - a.effectiveness)[0];
+                
+                // Find dominant emotions
+                const dominantEmotions = Object.entries(emotions)
+                    .filter(([emotion]) => emotion !== 'primaryEmotion' && emotion !== 'sentimentScore' && emotion !== 'neutral')
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 2)
+                    .map(([emotion]) => emotion);
+                
+                let suggestionsList = [];
+                
+                // Custom suggestions based on dominant emotions
+                if (dominantEmotions.includes('joy')) {
+                    suggestionsList.push("You've been experiencing joy recently. Consider journaling about what's bringing you happiness.");
+                }
+                
+                if (dominantEmotions.includes('sadness')) {
+                    suggestionsList.push("I notice sadness in your entries. Gentle physical activity like walking can help reduce feelings of sadness.");
+                }
+                
+                if (dominantEmotions.includes('fear')) {
+                    suggestionsList.push("Your entries show some anxiety. Try the 5-4-3-2-1 grounding technique: notice 5 things you see, 4 things you feel, 3 things you hear, 2 things you smell, and 1 thing you taste.");
+                }
+                
+                if (dominantEmotions.includes('anger')) {
+                    suggestionsList.push("I detect frustration in your entries. When anger arises, try counting to 10 slowly before responding.");
+                }
+                
+                // Add general suggestions based on sentiment
+                if (avgScore < -2) {
+                    // Suggestions for negative mood trends
+                    suggestionsList = suggestionsList.concat([
+                        "Your mood has been trending downward. Consider scheduling time for self-care activities.",
+                        `${mostEffectiveTool?.name || 'Mindfulness'} seems to work well for you. Try incorporating it more often.`,
+                        "Practice gratitude by writing down three things you appreciate each morning.",
+                        "Physical activity can significantly boost your mood. Try a 10-minute walk today."
+                    ]);
+                } else if (avgScore > 2) {
+                    // Suggestions for positive mood trends
+                    suggestionsList = suggestionsList.concat([
+                        "You're doing great! Maintain this positive momentum by continuing your healthy habits.",
+                        "Consider documenting what's working well so you can reference it during challenging times.",
+                        `Your mood tends to dip on ${lowestMoodDay?.day || 'some days'}. Plan something enjoyable for that day.`,
+                        "Share your positive energy by connecting with someone who might need support."
+                    ]);
+                } else {
+                    // Neutral suggestions
+                    suggestionsList = suggestionsList.concat([
+                        "Your mood has been relatively stable. This is a good time to build resilience for future challenges.",
+                        "Try experimenting with a new coping strategy to add to your toolkit.",
+                        "Mindful breathing for just 5 minutes daily can help maintain emotional balance.",
+                        "Consider tracking your sleep and how it correlates with your mood patterns."
+                    ]);
+                }
+                
+                return suggestionsList;
+            };
+            
+            // Process data for the emotion radar chart
+            const getEmotionRadarData = () => {
+                return Object.entries(emotions)
+                    .filter(([key]) => key !== 'neutral' && key !== 'primaryEmotion' && key !== 'sentimentScore')
+                    .map(([emotion, value]) => ({
+                        emotion,
+                        value: value || 0
+                    }));
+            };
+            
+            const value = {
+                currentPage,
+                setCurrentPage,
+                messages,
+                addMessage,
+                moodData,
+                setMoodData,
+                getSuggestions,
+                emotions,
+                getEmotionRadarData
+            };
+            
+            return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+        };
+        
+        // Header Component
+        const Header = () => {
+            return (
+                <header className="flex justify-between items-center px-6 pt-4 pb-2">
+                    <h1 className="text-xl font-bold">InsightMinds</h1>
+                    <span className="text-sm font-medium bg-gray-700 px-2 py-1 rounded-md">EN</span>
+                </header>
+            );
+        };
+        
+        // Navigation Component
+        const Navigation = () => {
+            const { currentPage, setCurrentPage } = useAppContext();
+            
+            return (
+                <nav className="px-4 mb-4">
+                    <div className="bg-gray-800 rounded-lg flex justify-between p-1">
+                        <button 
+                            onClick={() => setCurrentPage('chatLog')} 
+                            className={`flex-1 py-2 rounded-lg text-center ${currentPage === 'chatLog' ? 'bg-gray-700 font-medium' : 'text-gray-400'}`}
+                        >
+                            Chat Log
+                        </button>
+                        <button 
+                            onClick={() => setCurrentPage('analytics')} 
+                            className={`flex-1 py-2 rounded-lg text-center ${currentPage === 'analytics' ? 'bg-gray-700 font-medium' : 'text-gray-400'}`}
+                        >
+                            Analytics
+                        </button>
+                        <button 
+                            onClick={() => setCurrentPage('suggestions')} 
+                            className={`flex-1 py-2 rounded-lg text-center ${currentPage === 'suggestions' ? 'bg-gray-700 font-medium' : 'text-gray-400'}`}
+                        >
+                            Suggestions
+                        </button>
+                    </div>
+                </nav>
+            );
+        };
+        
+        // Progress Card Component
+        const ProgressCard = ({ title, current, target, progress }) => {
+            return (
+                <div className="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h3 className="text-base font-medium mb-2">{title}</h3>
+                    <p className="text-sm text-gray-400 mb-2">
+                        Current: {current} → Target: {target}
+                    </p>
+                    <div className="progress-bar mb-1">
+                        <div 
+                            className="progress-fill bg-indigo-500" 
+                            style={{ width: `${progress}%` }}
+                        ></div>
+                    </div>
+                    <p className="text-xs text-gray-500">Progress: {progress}% completed</p>
+                </div>
+            );
+        };
+        
+        // Mood Journey Chart Component
+        const MoodJourneyChart = ({ data }) => {
+            const maxValue = 10;
+            const chartHeight = 120;
+            
+            return (
+                <div className="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h3 className="text-base font-medium mb-2">My Mood Journey</h3>
+                    <p className="text-xs text-gray-500 mb-4">Track how your mood changes over time</p>
+                    
+                    <svg width="100%" height={chartHeight} className="mt-2">
+                        {/* Grid lines */}
+                        {[...Array(5)].map((_, i) => (
+                            <line
+                                key={`grid-${i}`}
+                                x1="0"
+                                y1={i * (chartHeight / 4)}
+                                x2="100%"
+                                y2={i * (chartHeight / 4)}
+                                className="chart-grid"
+                            />
+                        ))}
+                        
+                        {/* Vertical grid lines */}
+                        {data.map((point, i) => (
+                            <line
+                                key={`vgrid-${i}`}
+                                x1={`${(i / (data.length - 1)) * 100}%`}
+                                y1="0"
+                                x2={`${(i / (data.length - 1)) * 100}%`}
+                                y2={chartHeight}
+                                className="chart-grid"
+                            />
+                        ))}
+                        
+                        {/* Y-axis labels */}
+                        <text x="0" y="10" className="text-xs fill-current text-gray-500">10</text>
+                        <text x="0" y={chartHeight / 2} className="text-xs fill-current text-gray-500">5</text>
+                        <text x="0" y={chartHeight - 5} className="text-xs fill-current text-gray-500">0</text>
+                        
+                        {/* X-axis labels */}
+                        {data.map((point, i) => (
+                            <text
+                                key={`label-${i}`}
+                                x={`${(i / (data.length - 1)) * 100}%`}
+                                y={chartHeight}
+                                className="text-xs fill-current text-gray-500"
+                                textAnchor="middle"
+                                dy="15"
+                            >
+                                {point.day}
+                            </text>
+                        ))}
+                        
+                        {/* Line chart */}
+                        <polyline
+                            points={data.map((point, i) => `${(i / (data.length - 1)) * 100}%,${chartHeight - (point.value / maxValue) * chartHeight}`).join(' ')}
+                            fill="none"
+                            stroke="#8b5cf6"
+                            strokeWidth="2"
+                        />
+                        
+                        {/* Data points */}
+                        {data.map((point, i) => (
+                            <circle
+                                key={`point-${i}`}
+                                cx={`${(i / (data.length - 1)) * 100}%`}
+                                cy={chartHeight - (point.value / maxValue) * chartHeight}
+                                r="4"
+                                fill="#8b5cf6"
+                            />
+                        ))}
+                    </svg>
+                </div>
+            );
+        };
+        
+        // Coping Tools Chart Component
+        const CopingToolsChart = ({ data }) => {
+            return (
+                <div className="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h3 className="text-base font-medium mb-2">My Coping Tools</h3>
+                    <p className="text-xs text-gray-500 mb-4">See which strategies work best for you</p>
+                    
+                    <div className="space-y-4">
+                        {data.map((tool, index) => (
+                            <div key={`tool-${index}`}>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-gray-400">{tool.name}</span>
+                                </div>
+                                <div className="progress-bar">
+                                    <div 
+                                        className="progress-fill bg-indigo-400" 
+                                        style={{ width: `${tool.effectiveness}%` }}
+                                    ></div>
+                                </div>
+                                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                    <span>Effectiveness: {tool.effectiveness}%</span>
+                                    <span>Usage: {tool.usageCount}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+        
+        // Self-Talk Patterns Chart Component
+        const SelfTalkPatternsChart = ({ data }) => {
+            return (
+                <div className="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h3 className="text-base font-medium mb-2">My Self-Talk Patterns</h3>
+                    <p className="text-xs text-gray-500 mb-4">Monitor your internal dialogue</p>
+                    
+                    <svg width="100%" height="150">
+                        {/* Background grid */}
+                        {[...Array(5)].map((_, i) => (
+                            <line
+                                key={`grid-${i}`}
+                                x1="0"
+                                y1={i * (150 / 4)}
+                                x2="100%"
+                                y2={i * (150 / 4)}
+                                className="chart-grid"
+                            />
+                        ))}
+                        
+                        {/* Y-axis labels */}
+                        <text x="0" y="15" className="text-xs fill-current text-gray-500">100</text>
+                        <text x="0" y="65" className="text-xs fill-current text-gray-500">50</text>
+                        <text x="0" y="115" className="text-xs fill-current text-gray-500">0</text>
+                        
+                        {/* Render stacked bars */}
+                        {data.map((day, i) => {
+                            const barWidth = 100 / data.length * 0.6; // 60% of available space per day
+                            const barSpacing = 100 / data.length;
+                            const barX = i * barSpacing + barSpacing * 0.2; // 20% margin on each side
+                            
+                            return (
+                                <g key={`day-${i}`}>
+                                    {/* X-axis labels */}
+                                    <text
+                                        x={`${barX + barWidth/2}%`}
+                                        y="140"
+                                        className="text-xs fill-current text-gray-500"
+                                        textAnchor="middle"
+                                    >
+                                        {day.day}
+                                    </text>
+                                    
+                                    {/* Positive bar */}
+                                    <rect
+                                        x={`${barX}%`}
+                                        y={120 - (day.positive + day.negative) * 1.2} // Scale to fit in graph
+                                        width={`${barWidth}%`}
+                                        height={day.positive * 1.2}
+                                        className="stacked-bar"
+                                        fill="#4ade80"
+                                        opacity="0.8"
+                                    />
+                                    
+                                    {/* Negative bar */}
+                                    <rect
+                                        x={`${barX}%`}
+                                        y={120 - day.negative * 1.2}
+                                        width={`${barWidth}%`}
+                                        height={day.negative * 1.2}
+                                        className="stacked-bar"
+                                        fill="#f87171"
+                                        opacity="0.8"
+                                    />
+                                </g>
+                            );
+                        })}
+                        
+                        {/* Legend */}
+                        <rect x="5%" y="150" width="10" height="10" fill="#4ade80" opacity="0.8" />
+                        <text x="8%" y="160" className="text-xs fill-current text-gray-400">Positive %</text>
+                        
+                        <rect x="30%" y="150" width="10" height="10" fill="#f87171" opacity="0.8" />
+                        <text x="33%" y="160" className="text-xs fill-current text-gray-400">Negative %</text>
+                    </svg>
+                </div>
+            );
+        };
+        
+        // Emotion Radar Chart Component
+        const EmotionRadarChart = ({ data }) => {
+            const emotions = ['joy', 'sadness', 'anger', 'fear', 'surprise', 'disgust'];
+            const centerX = 125;
+            const centerY = 125;
+            const radius = 100;
+            
+            // Convert degrees to radians
+            const toRadians = (degrees) => degrees * Math.PI / 180;
+            
+            // Calculate point coordinates based on angle and value
+            const calculatePoint = (emotion, value) => {
+                const index = emotions.indexOf(emotion);
+                const angle = index * (360 / emotions.length);
+                const normalizedValue = value / 100;
+                const x = centerX + radius * normalizedValue * Math.cos(toRadians(angle - 90));
+                const y = centerY + radius * normalizedValue * Math.sin(toRadians(angle - 90));
+                return { x, y };
+            };
+            
+            // Create points for the radar chart
+            const points = emotions.map(emotion => {
+                const item = data.find(d => d.emotion === emotion);
+                return calculatePoint(emotion, item ? item.value : 0);
+            });
+            
+            // Create polygon points string
+            const polygonPoints = points.map(point => `${point.x},${point.y}`).join(' ');
+            
+            return (
+                <div className="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h3 className="text-base font-medium mb-2">My Emotion Profile</h3>
+                    <p className="text-xs text-gray-500 mb-4">A radar chart showing your emotional patterns</p>
+                    
+                    <div className="radar-chart">
+                        <svg width="100%" height="100%" viewBox="0 0 250 250">
+                            {/* Background circles */}
+                            {[0.25, 0.5, 0.75, 1].map((scale, i) => (
+                                <circle
+                                    key={`circle-${i}`}
+                                    cx={centerX}
+                                    cy={centerY}
+                                    r={radius * scale}
+                                    fill="none"
+                                    stroke="rgba(255, 255, 255, 0.1)"
+                                    strokeWidth="1"
+                                />
+                            ))}
+                            
+                            {/* Emotion axes */}
+                            {emotions.map((emotion, i) => {
+                                const angle = i * (360 / emotions.length);
+                                const endX = centerX + radius * Math.cos(toRadians(angle - 90));
+                                const endY = centerY + radius * Math.sin(toRadians(angle - 90));
+                                
+                                return (
+                                    <g key={`axis-${i}`}>
+                                        <line
+                                            x1={centerX}
+                                            y1={centerY}
+                                            x2={endX}
+                                            y2={endY}
+                                            stroke="rgba(255, 255, 255, 0.2)"
+                                            strokeWidth="1"
+                                        />
+                                        <text
+                                            x={centerX + (radius + 15) * Math.cos(toRadians(angle - 90))}
+                                            y={centerY + (radius + 15) * Math.sin(toRadians(angle - 90))}
+                                            fill="rgba(255, 255, 255, 0.7)"
+                                            fontSize="10"
+                                            textAnchor="middle"
+                                            dominantBaseline="middle"
+                                        >
+                                            {emotion.charAt(0).toUpperCase() + emotion.slice(1)}
+                                        </text>
+                                    </g>
+                                );
+                            })}
+                            
+                            {/* Data polygon */}
+                            <polygon
+                                points={polygonPoints}
+                                fill="rgba(139, 92, 246, 0.5)"
+                                stroke="#8b5cf6"
+                                strokeWidth="2"
+                            />
+                            
+                            {/* Data points */}
+                            {points.map((point, i) => (
+                                <circle
+                                    key={`point-${i}`}
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r="4"
+                                    fill="#8b5cf6"
+                                />
+                            ))}
+                        </svg>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Emotion Percentage Component
+        const EmotionPercentages = ({ emotions }) => {
+            // Emotion colors
+            const emotionColors = {
+                joy: 'bg-green-500',
+                sadness: 'bg-blue-500',
+                anger: 'bg-red-500',
+                fear: 'bg-purple-500',
+                surprise: 'bg-yellow-500',
+                disgust: 'bg-orange-500',
+                neutral: 'bg-gray-500'
+            };
+            
+            // Sort emotions by percentage
+            const sortedEmotions = Object.entries(emotions)
+                .filter(([key]) => key !== 'primaryEmotion' && key !== 'sentimentScore')
+                .sort((a, b) => b[1] - a[1]);
+            
+            return (
+                <div className="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h3 className="text-base font-medium mb-3">My Emotion Breakdown</h3>
+                    
+                    <div className="space-y-2">
+                        {sortedEmotions.map(([emotion, percentage]) => (
+                            <div key={emotion} className="emotion-percentage">
+                                <div className="w-24 text-sm capitalize">{emotion}</div>
+                                <div className="flex-grow">
+                                    <div className="progress-bar">
+                                        <div 
+                                            className={`progress-fill ${emotionColors[emotion] || 'bg-gray-500'}`}
+                                            style={{ width: `${percentage}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                                <div className="w-12 text-right text-sm">{percentage}%</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+        
+        // Analytics Page Component
+        const AnalyticsPage = () => {
+            const { moodData, emotions, getEmotionRadarData } = useAppContext();
+            const [timeRange, setTimeRange] = React.useState('Last 7 days');
+            
+            return (
+                <div className="px-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold">My Progress</h2>
+                        <div className="relative">
+                            <select 
+                                value={timeRange}
+                                onChange={(e) => setTimeRange(e.target.value)}
+                                className="appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                                <option>Last 7 days</option>
+                                <option>Last 30 days</option>
+                                <option>Last 90 days</option>
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white">
+                                <i className="bi bi-chevron-down text-xs"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <ProgressCard 
+                        title="My Mood Stability" 
+                        current={moodData.moodStability.current} 
+                        target={moodData.moodStability.target} 
+                        progress={moodData.moodStability.progress} 
+                    />
+                    
+                    <ProgressCard 
+                        title="My Self-Talk" 
+                        current={`${moodData.selfTalk.current} %`} 
+                        target={`${moodData.selfTalk.target} %`}
+                        progress={moodData.selfTalk.progress} 
+                    />
+                    
+                    <ProgressCard 
+                        title="My Challenges" 
+                        current={`${moodData.challenges.current} per week`} 
+                        target={`${moodData.challenges.target} per week`}
+                        progress={moodData.challenges.progress} 
+                    />
+                    
+                    <ProgressCard 
+                        title="My Mindfulness" 
+                        current={`${moodData.mindfulness.current} days`} 
+                        target={`${moodData.mindfulness.target} days`}
+                        progress={moodData.mindfulness.progress} 
+                    />
+                    
+                    <MoodJourneyChart data={moodData.moodJourney} />
+                    
+                    <EmotionRadarChart data={getEmotionRadarData()} />
+                    
+                    <EmotionPercentages emotions={emotions} />
+                    
+                    <CopingToolsChart data={moodData.copingTools} />
+                    
+                    <SelfTalkPatternsChart data={moodData.selfTalkPatterns} />
+                </div>
+            );
+        };
+        
+        // Chat Log Page Component
+        const ChatLogPage = () => {
+            const { messages, addMessage } = useAppContext();
+            const [newMessage, setNewMessage] = React.useState('');
+            const [isLoading, setIsLoading] = React.useState(false);
+            const messagesEndRef = React.useRef(null);
+            
+            // Auto-scroll to bottom when messages change
+            React.useEffect(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, [messages]);
+            
+            const handleSendMessage = () => {
+                if (!newMessage.trim()) return;
+                
+                setIsLoading(true);
+                addMessage(newMessage);
+                setNewMessage('');
+                
+                // Simulate loading state
+                setTimeout(() => {
+                    setIsLoading(false);
+                }, 1000);
+            };
+            
+            const formatTime = (timestamp) => {
+                return new Date(timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            };
+            
+            // Format emotions as pills
+            const renderEmotionPills = (emotions) => {
+                if (!emotions) return null;
+                
+                const emotionColors = {
+                    joy: 'bg-green-900 text-green-200',
+                    sadness: 'bg-blue-900 text-blue-200',
+                    anger: 'bg-red-900 text-red-200',
+                    fear: 'bg-purple-900 text-purple-200',
+                    surprise: 'bg-yellow-900 text-yellow-200',
+                    disgust: 'bg-orange-900 text-orange-200'
+                };
+                
+                // Get top 3 emotions excluding neutral
+                const topEmotions = Object.entries(emotions)
+                    .filter(([key, val]) => key !== 'primaryEmotion' && key !== 'sentimentScore' && key !== 'neutral' && val > 5)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3);
+                
+                if (topEmotions.length === 0) return null;
+                
+                return (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                        {topEmotions.map(([emotion, value]) => (
+                            <span key={emotion} className={`emotion-pill ${emotionColors[emotion] || 'bg-gray-700 text-gray-300'}`}>
+                                {emotion}: {value}%
+                            </span>
+                        ))}
+                    </div>
+                );
+            };
+            
+            return (
+                <div className="flex flex-col h-[calc(100vh-120px)]">
+                    <div className="px-4 mb-2">
+                        <h2 className="text-xl font-bold mb-4">Chat Log</h2>
+                    </div>
+                    
+                    <div className="flex-grow overflow-y-auto px-4 mb-4 space-y-2">
+                        {messages.length === 0 ? (
+                            <div className="text-center text-gray-500 py-10">
+                                <i className="bi bi-chat-dots-fill text-3xl mb-2"></i>
+                                <p>Share how you're feeling to get started.</p>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col">
+                                {messages.map((msg, index) => (
+                                    <div 
+                                        key={msg.id || index} 
+                                        className={`message-bubble fade-in ${msg.isSystem ? 'system-message' : 'user-message'}`}
+                                    >
+                                        <p className="text-sm">{msg.text}</p>
+                                        <div className="flex justify-between items-center mt-1">
+                                            <small className="text-gray-500 text-xs">
+                                                {formatTime(msg.timestamp)}
+                                            </small>
+                                            {!msg.isSystem && msg.sentiment && (
+                                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                                    msg.sentiment === 'positive' ? 'bg-green-900 text-green-200' :
+                                                    msg.sentiment === 'negative' ? 'bg-red-900 text-red-200' :
+                                                    'bg-gray-700 text-gray-300'
+                                                }`}>
+                                                    {msg.sentiment}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {!msg.isSystem && msg.emotions && renderEmotionPills(msg.emotions)}
+                                    </div>
+                                ))}
+                                <div ref={messagesEndRef} />
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="px-4 pb-4">
+                        <div className="flex items-center bg-gray-800 rounded-full overflow-hidden p-1">
+                            <input
+                                type="text"
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                                placeholder="Share how you're feeling..."
+                                className="flex-grow bg-transparent border-none px-3 py-2 focus:outline-none text-sm"
+                                disabled={isLoading}
+                            />
+                            <button
+                                onClick={handleSendMessage}
+                                disabled={isLoading || !newMessage.trim()}
+                                className="bg-indigo-600 text-white rounded-full w-8 h-8 flex items-center justify-center mr-1 disabled:opacity-50"
+                            >
+                                {isLoading ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                    <i className="bi bi-send-fill text-sm"></i>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Suggestions Page Component
+        const SuggestionsPage = () => {
+            const { getSuggestions, messages, emotions } = useAppContext();
+            const suggestions = getSuggestions();
+            const [activeSuggestion, setActiveSuggestion] = React.useState(null);
+            
+            // Calculate mood trend from messages
+            const getMoodTrend = () => {
+                const recentMessages = messages
+                    .filter(msg => !msg.isSystem)
+                    .slice(-10);
+                
+                if (recentMessages.length < 3) return "Not enough data";
+                
+                const scores = recentMessages.map(msg => msg.score || 0);
+                const average = scores.reduce((a, b) => a + b, 0) / scores.length;
+                
+                if (average > 2) return "Positive";
+                if (average < -2) return "Negative";
+                return "Stable";
+            };
+            
+            // Get dominant emotion for customized recommendations
+            const getDominantEmotion = () => {
+                const relevantEmotions = Object.entries(emotions)
+                    .filter(([key]) => key !== 'neutral' && key !== 'primaryEmotion' && key !== 'sentimentScore')
+                    .sort((a, b) => b[1] - a[1]);
+                
+                return relevantEmotions.length > 0 ? relevantEmotions[0][0] : 'neutral';
+            };
+            
+            // Custom implementation steps based on emotion
+            const getImplementationSteps = (suggestionIdx) => {
+                const dominantEmotion = getDominantEmotion();
+                
+                const commonSteps = [
+                    "Start small with just 5 minutes per day",
+                    "Track your progress in the journal",
+                    "Be consistent and patient with yourself"
+                ];
+                
+                const emotionSpecificSteps = {
+                    joy: [
+                        "Share your positive experiences with a trusted friend",
+                        "Notice what contributes to your positive feelings",
+                        "Express gratitude for what's going well"
+                    ],
+                    sadness: [
+                        "Reach out to a supportive person when feelings intensify",
+                        "Practice self-compassion when difficult emotions arise",
+                        "Engage in gentle physical movement like walking"
+                    ],
+                    anger: [
+                        "Take deep breaths before responding to triggers",
+                        "Write down your thoughts to process them",
+                        "Look for the underlying need behind your frustration"
+                    ],
+                    fear: [
+                        "Focus on what's within your control",
+                        "Practice grounding techniques when anxiety spikes",
+                        "Break overwhelming tasks into smaller steps"
+                    ],
+                    surprise: [
+                        "Allow yourself time to process unexpected events",
+                        "Look for the opportunities in change",
+                        "Connect with your values during transitions"
+                    ],
+                    disgust: [
+                        "Notice when your standards might be too rigid",
+                        "Practice acceptance of what cannot be changed",
+                        "Find constructive ways to address situations that trigger aversion"
+                    ]
+                };
+                
+                // Return a mix of common and emotion-specific steps
+                const specificSteps = emotionSpecificSteps[dominantEmotion] || commonSteps;
+                return suggestionIdx % 2 === 0 
+                    ? [...specificSteps.slice(0, 2), commonSteps[0]]
+                    : [specificSteps[0], ...commonSteps.slice(0, 2)];
+            };
+            
+            return (
+                <div className="px-4">
+                    <div className="mb-6">
+                        <h2 className="text-xl font-bold mb-2">Suggestions</h2>
+                        <p className="text-sm text-gray-400">Personalized recommendations based on your mood patterns</p>
+                    </div>
+                    
+                    <div className="bg-gray-800 rounded-lg p-4 mb-6">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-base font-medium">Current Mood Trend</h3>
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                                getMoodTrend() === "Positive" ? "bg-green-900 text-green-200" :
+                                getMoodTrend() === "Negative" ? "bg-red-900 text-red-200" :
+                                "bg-gray-700 text-white"
+                            }`}>
+                                {getMoodTrend()}
+                            </span>
+                        </div>
+                        <p className="text-sm text-gray-400">
+                            Based on your recent messages and interactions, we've analyzed your emotional patterns.
+                        </p>
+                    </div>
+                    
+                    <h3 className="text-lg font-medium mb-4">Recommended Strategies</h3>
+                    
+                    <div className="space-y-3">
+                        {suggestions.map((suggestion, index) => (
+                            <div 
+                                key={index} 
+                                className={`bg-gray-800 rounded-lg p-4 cursor-pointer transition-all ${
+                                    activeSuggestion === index ? 'border-l-4 border-indigo-500' : ''
+                                }`}
+                                onClick={() => setActiveSuggestion(activeSuggestion === index ? null : index)}
+                            >
+                                <div className="flex justify-between items-center">
+                                    <p className="text-sm">{suggestion}</p>
+                                    <i className={`bi ${activeSuggestion === index ? 'bi-chevron-up' : 'bi-chevron-down'} text-gray-400`}></i>
+                                </div>
+                                
+                                {activeSuggestion === index && (
+                                    <div className="mt-3 pt-3 border-t border-gray-700">
+                                        <h4 className="text-sm font-medium mb-2">How to implement:</h4>
+                                        <ul className="text-sm text-gray-400 list-disc list-inside space-y-2">
+                                            {getImplementationSteps(index).map((step, i) => (
+                                                <li key={i}>{step}</li>
+                                            ))}
+                                        </ul>
+                                        <button className="mt-4 bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg">
+                                            Add to my plan
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="bg-gray-800 rounded-lg p-4 mt-6">
+                        <h3 className="text-base font-medium mb-2">Need more help?</h3>
+                        <p className="text-sm text-gray-400 mb-3">
+                            Our AI can propose personalized suggestions based on your needs
+                        </p>
+                        <button className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm">
+                            Get personalized guidance
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Footer Component with Quote
+        const Footer = () => {
+            return (
+                <footer className="px-6 py-4 mt-4 text-center border-t border-gray-800">
+                    <p className="text-xs text-gray-500 italic">
+                        "The good life is a process, not a state of being. It is a direction, not a destination." -Carl Rogers
+                    </p>
+                </footer>
+            );
+        };
+        
+        // Main App Component
+        const App = () => {
+            const { currentPage } = useAppContext();
+            
+            return (
+                <div className="min-h-screen bg-black text-white">
+                    <Header />
+                    <Navigation />
+                    
+                    {currentPage === 'analytics' && <AnalyticsPage />}
+                    {currentPage === 'chatLog' && <ChatLogPage />}
+                    {currentPage === 'suggestions' && <SuggestionsPage />}
+                    
+                    <Footer />
+                </div>
+            );
+        };
+        
+        // Root Component with Context Provider
+        const Root = () => {
+            return (
+                <AppProvider>
+                    <App />
+                </AppProvider>
+            );
+        };
+        
+        // Render the app
+        const rootElement = document.getElementById('root');
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(<Root />);
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
